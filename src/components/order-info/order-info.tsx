@@ -1,67 +1,93 @@
 import { FC, useMemo } from 'react';
 import { Preloader } from '../ui/preloader';
 import { OrderInfoUI } from '../ui/order-info';
-import { TIngredient } from '@utils-types';
+import { TIngredient, TOrder } from '@utils-types';
+import { getIngredientsWithSelector } from '../../services/slices/IngredientsSlice';
+import { getOrderByNum } from '../../services/slices/FeedDataSlice';
+import { useSelector, useDispatch } from '../../services/store';
+import { useParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { selectOrderById } from '../../services/selector';
+
+interface TIngredientWithCount extends TIngredient {
+    count: number;
+}
+
+interface ExtendedOrderInfo extends TOrder {
+    ingredientsInfo: Record<string, TIngredientWithCount>;
+    date: Date;
+    total: number;
+}
 
 export const OrderInfo: FC = () => {
-  /** TODO: взять переменные orderData и ingredients из стора */
-  const orderData = {
-    createdAt: '',
-    ingredients: [],
-    _id: '',
-    status: '',
-    name: '',
-    updatedAt: 'string',
-    number: 0
-  };
+    const { number } = useParams();
+    const orderNumber = Number(number);
+    const dispatch = useDispatch();
 
-  const ingredients: TIngredient[] = [];
+    const orderData = useSelector(selectOrderById(orderNumber));
+    const ingredients = useSelector(getIngredientsWithSelector);
 
-  /* Готовим данные для отображения */
-  const orderInfo = useMemo(() => {
-    if (!orderData || !ingredients.length) return null;
+    useEffect(() => {
+        if (!orderData && !isNaN(orderNumber)) {
+            dispatch(getOrderByNum(orderNumber));
+        }
+    }, [dispatch, orderData, orderNumber]);
 
-    const date = new Date(orderData.createdAt);
-
-    type TIngredientsWithCount = {
-      [key: string]: TIngredient & { count: number };
-    };
-
-    const ingredientsInfo = orderData.ingredients.reduce(
-      (acc: TIngredientsWithCount, item) => {
-        if (!acc[item]) {
-          const ingredient = ingredients.find((ing) => ing._id === item);
-          if (ingredient) {
-            acc[item] = {
-              ...ingredient,
-              count: 1
-            };
-          }
-        } else {
-          acc[item].count++;
+    const orderInfo = useMemo<ExtendedOrderInfo | null>(() => {
+        if (!orderData || !ingredients.length) {
+            return null;
         }
 
-        return acc;
-      },
-      {}
-    );
+        const ingredientsInfo = orderData.ingredients.reduce<
+            Record<string, TIngredientWithCount>
+        >((acc, itemId) => {
+            if (!acc[itemId]) {
+                const ingredient = ingredients.find((ing) => ing._id === itemId);
+                if (ingredient) {
+                    acc[itemId] = {
+                        ...ingredient,
+                        count: 1
+                    };
+                }
+            } else {
+                acc[itemId].count++;
+            }
+            return acc;
+        }, {});
 
-    const total = Object.values(ingredientsInfo).reduce(
-      (acc, item) => acc + item.price * item.count,
-      0
-    );
+        if (Object.keys(ingredientsInfo).length === 0) {
+            return null;
+        }
 
-    return {
-      ...orderData,
-      ingredientsInfo,
-      date,
-      total
-    };
-  }, [orderData, ingredients]);
+        const total = Object.values(ingredientsInfo).reduce(
+            (sum, item) => sum + item.price * item.count,
+            0
+        );
 
-  if (!orderInfo) {
-    return <Preloader />;
-  }
+        return {
+            ...orderData,
+            ingredientsInfo,
+            date: new Date(orderData.createdAt),
+            total
+        };
+    }, [orderData, ingredients]);
 
-  return <OrderInfoUI orderInfo={orderInfo} />;
+    if (!number || isNaN(orderNumber)) {
+        return (
+            <div className='text text_type_main-default text_color_error'>
+                Некорректный номер заказа
+            </div>
+        );
+    }
+
+    if (!orderInfo) {
+        return (
+            <div className='text text_type_main-default text_color_inactive'>
+                <Preloader />
+                <div className='mt-4'>Загрузка информации о заказе...</div>
+            </div>
+        );
+    }
+
+    return <OrderInfoUI orderInfo={orderInfo} />;
 };
