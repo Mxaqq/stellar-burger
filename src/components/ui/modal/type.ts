@@ -1,7 +1,10 @@
-import { ReactNode } from 'react';
+import { HTMLAttributes, ReactNode } from 'react';
 
-export type TModalUIProps = {
-  title: string;
-  onClose: () => void;
-  children?: ReactNode;
-};
+export interface ModalUIProps extends HTMLAttributes<HTMLDivElement> {
+    title?: string;
+    onClose: () => void;
+    children: ReactNode;
+    className?: string;
+    showCloseButton?: boolean;
+    testId?: string;
+}
